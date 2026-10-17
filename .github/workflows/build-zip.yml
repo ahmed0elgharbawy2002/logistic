@@ -1,0 +1,56 @@
+name: Build EXE from Zip
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Find and Extract Zip File
+      shell: pwsh
+      run: |
+        $zipFile = Get-ChildItem -Filter *.zip | Select-Object -First 1
+        if ($zipFile) {
+            Write-Host "Found zip: $($zipFile.Name)"
+            Expand-Archive -Path $zipFile.FullName -DestinationPath "extracted_project" -Force
+        } else {
+            Write-Error "No zip file found in the repository!"
+            exit 1
+        }
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies and PyInstaller
+      shell: pwsh
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        $reqPath = Get-ChildItem -Path "extracted_project" -Recurse -Filter "requirements.txt" | Select-Object -First 1
+        if ($reqPath) {
+            pip install -r $reqPath.FullName
+        }
+
+    - name: Build EXE with PyInstaller
+      shell: pwsh
+      run: |
+        $mainScript = Get-ChildItem -Path "extracted_project" -Recurse -Filter "*.py" | Select-Object -First 1
+        if ($mainScript) {
+            Write-Host "Building script: $($mainScript.FullName)"
+            pyinstaller --onedir --noconsole --clean $mainScript.FullName
+        } else {
+            Write-Error "No Python script found!"
+            exit 1
+        }
+
+    - name: Upload Executable Folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-app-exe
+        path: extracted_project/dist/*
